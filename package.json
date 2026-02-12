@@ -16,16 +16,23 @@
   ],
   "license": "MIT",
   "main": "dist/index.js",
-  "name": "wopr-plugin-voice-chatterbox",
+  "name": "@wopr-network/wopr-plugin-voice-chatterbox",
   "scripts": {
     "build": "tsc",
     "check": "biome check src/ && tsc --noEmit",
     "clean": "rm -rf dist",
     "format": "biome format --write src/",
     "lint": "biome check src/",
-    "lint:fix": "biome check --fix src/"
+    "lint:fix": "biome check --fix src/",
+    "prepublishOnly": "npm run build"
   },
   "type": "module",
   "types": "dist/index.d.ts",
-  "version": "1.0.0"
+  "version": "1.0.0",
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist"
+  ]
 }
