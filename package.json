@@ -37,5 +37,24 @@
   ],
   "release": {
     "extends": "@wopr-network/semantic-release-config"
+  },
+  "wopr": {
+    "plugin": {
+      "category": "voice",
+      "description": "Chatterbox TTS with voice cloning",
+      "install": [
+        {
+          "image": "devnen/chatterbox-tts-server",
+          "kind": "docker",
+          "label": "Pull Chatterbox TTS server",
+          "tag": "latest"
+        }
+      ],
+      "name": "voice-chatterbox",
+      "requires": {
+        "docker": ["devnen/chatterbox-tts-server:latest"]
+      },
+      "type": "tts"
+    }
   }
 }
