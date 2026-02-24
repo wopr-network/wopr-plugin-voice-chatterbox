@@ -21,6 +21,15 @@ interface TTSOptions {
 	sampleRate?: number;
 }
 
+interface ChatterboxTTSOptions extends TTSOptions {
+	/** WAV/MP3 audio buffer of a reference voice for cloning */
+	referenceAudio?: Buffer;
+	/** Exaggeration level (0.0-1.0) - controls expressiveness */
+	exaggeration?: number;
+	/** CFG weight (0.0-1.0) - controls adherence to voice characteristics */
+	cfgWeight?: number;
+}
+
 interface Voice {
 	id: string;
 	name: string;
@@ -155,6 +164,10 @@ class ChatterboxProvider implements TTSProvider {
 		this.config = { ...DEFAULT_CONFIG, ...config };
 	}
 
+	get serverUrl(): string {
+		return this.config.serverUrl;
+	}
+
 	validateConfig(): void {
 		if (!this.config.serverUrl) {
 			throw new Error("serverUrl is required");
@@ -190,10 +203,24 @@ class ChatterboxProvider implements TTSProvider {
 
 	async synthesize(
 		text: string,
-		options?: TTSOptions,
+		options?: ChatterboxTTSOptions,
 	): Promise<TTSSynthesisResult> {
 		const startTime = Date.now();
 		const voice = options?.voice || this.config.voice;
+
+		// Use per-call overrides for exaggeration/cfgWeight if provided
+		const exaggeration = options?.exaggeration ?? this.config.exaggeration;
+		const cfgWeight = options?.cfgWeight ?? this.config.cfgWeight;
+
+		// If referenceAudio is provided, use voice cloning endpoint
+		const referenceAudio = options?.referenceAudio;
+		if (referenceAudio) {
+			return this.synthesizeWithCloning(text, referenceAudio, {
+				exaggeration,
+				cfgWeight,
+				temperature: this.config.temperature,
+			});
+		}
 
 		// Build request body (OpenAI-compatible format)
 		const requestBody = {
@@ -202,8 +229,8 @@ class ChatterboxProvider implements TTSProvider {
 			model: "chatterbox", // Some servers require this
 			response_format: "wav",
 			// Chatterbox-specific parameters
-			exaggeration: this.config.exaggeration,
-			cfg_weight: this.config.cfgWeight,
+			exaggeration,
+			cfg_weight: cfgWeight,
 			temperature: this.config.temperature,
 		};
 
@@ -218,7 +245,7 @@ class ChatterboxProvider implements TTSProvider {
 				body: JSON.stringify(requestBody),
 				signal: AbortSignal.timeout(60000), // TTS can take a while
 			});
-		} catch (err) {
+		} catch (_err) {
 			// Try native Chatterbox endpoint
 			response = await fetch(`${this.config.serverUrl}/synthesize`, {
 				method: "POST",
@@ -228,8 +255,8 @@ class ChatterboxProvider implements TTSProvider {
 				body: JSON.stringify({
 					text,
 					voice,
-					exaggeration: this.config.exaggeration,
-					cfg_weight: this.config.cfgWeight,
+					exaggeration,
+					cfg_weight: cfgWeight,
 					temperature: this.config.temperature,
 				}),
 				signal: AbortSignal.timeout(60000),
@@ -246,6 +273,59 @@ class ChatterboxProvider implements TTSProvider {
 		const wavBuffer = Buffer.from(arrayBuffer);
 
 		// Extract PCM from WAV
+		const { pcm, sampleRate } = wavToPcm(wavBuffer);
+
+		return {
+			audio: pcm,
+			format: "pcm_s16le",
+			sampleRate,
+			durationMs: Date.now() - startTime,
+		};
+	}
+
+	/**
+	 * Synthesize speech using voice cloning with a reference audio sample.
+	 * Sends multipart/form-data to the Chatterbox server.
+	 */
+	private async synthesizeWithCloning(
+		text: string,
+		referenceAudio: Buffer,
+		params: { exaggeration: number; cfgWeight: number; temperature: number },
+	): Promise<TTSSynthesisResult> {
+		const startTime = Date.now();
+
+		// Build multipart form data
+		// Node 18+ has built-in FormData and Blob
+		const formData = new FormData();
+		formData.append("text", text);
+		// Copy into a plain ArrayBuffer to avoid SharedArrayBuffer TS issue
+		const audioArrayBuffer = new ArrayBuffer(referenceAudio.byteLength);
+		new Uint8Array(audioArrayBuffer).set(referenceAudio);
+		formData.append(
+			"audio",
+			new Blob([audioArrayBuffer], { type: "audio/wav" }),
+			"reference.wav",
+		);
+		formData.append("exaggeration", params.exaggeration.toString());
+		formData.append("cfg_weight", params.cfgWeight.toString());
+		formData.append("temperature", params.temperature.toString());
+
+		// Try the /synthesize endpoint with multipart (clone mode)
+		const response = await fetch(`${this.config.serverUrl}/synthesize`, {
+			method: "POST",
+			body: formData,
+			signal: AbortSignal.timeout(120000), // Cloning can be slower
+		});
+
+		if (!response.ok) {
+			const error = await response.text();
+			throw new Error(
+				`Chatterbox voice cloning error: ${response.status} - ${error}`,
+			);
+		}
+
+		const arrayBuffer = await response.arrayBuffer();
+		const wavBuffer = Buffer.from(arrayBuffer);
 		const { pcm, sampleRate } = wavToPcm(wavBuffer);
 
 		return {
@@ -304,12 +384,10 @@ const plugin: WOPRPlugin = {
 					id: provider.metadata.name,
 					name: provider.metadata.description || provider.metadata.name,
 				});
-				ctx.log.info(
-					`Chatterbox TTS registered (${provider["config"].serverUrl})`,
-				);
+				ctx.log.info(`Chatterbox TTS registered (${provider.serverUrl})`);
 			} else {
 				ctx.log.warn(
-					`Chatterbox server not reachable at ${provider["config"].serverUrl}`,
+					`Chatterbox server not reachable at ${provider.serverUrl}`,
 				);
 			}
 		} catch (err) {
