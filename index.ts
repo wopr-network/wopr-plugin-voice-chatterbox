@@ -51,7 +51,10 @@ interface VoicePluginMetadata {
 interface TTSProvider {
 	readonly metadata: VoicePluginMetadata;
 	readonly voices: Voice[];
-	synthesize(text: string, options?: TTSOptions): Promise<TTSSynthesisResult>;
+	synthesize(
+		text: string,
+		options?: ChatterboxTTSOptions,
+	): Promise<TTSSynthesisResult>;
 	healthCheck?(): Promise<boolean>;
 	shutdown?(): Promise<void>;
 	validateConfig(): void;
