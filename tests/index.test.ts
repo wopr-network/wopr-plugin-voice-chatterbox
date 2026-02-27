@@ -37,7 +37,7 @@ interface MockCtx {
   log: MockLog;
   getConfig: () => { serverUrl: string };
   registerExtension: ReturnType<typeof vi.fn>;
-  registerTTSProvider: ReturnType<typeof vi.fn>;
+  registerProvider: ReturnType<typeof vi.fn>;
 }
 
 interface SynthesizeResult {
@@ -54,7 +54,7 @@ function mockCtx(): MockCtx {
     log: { info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() },
     getConfig: () => ({ serverUrl: "http://localhost:5123" }),
     registerExtension: vi.fn(),
-    registerTTSProvider: vi.fn(),
+    registerProvider: vi.fn(),
   };
 }
 
@@ -191,7 +191,7 @@ describe("plugin", () => {
     await expect(plugin.shutdown!()).resolves.toBeUndefined();
   });
 
-  it("registers TTS provider via registerExtension and registerTTSProvider on init", async () => {
+  it("registers TTS provider via registerExtension and registerProvider on init", async () => {
     mockFetch.mockResolvedValueOnce({ ok: true });
     mockFetch.mockResolvedValueOnce({ ok: true, json: async () => [] });
 
@@ -199,6 +199,6 @@ describe("plugin", () => {
     await plugin.init?.(ctx as Parameters<NonNullable<typeof plugin.init>>[0]);
 
     expect(ctx.registerExtension).toHaveBeenCalledWith("tts", expect.any(Object));
-    expect(ctx.registerTTSProvider).toHaveBeenCalled();
+    expect(ctx.registerProvider).toHaveBeenCalled();
   });
 });
