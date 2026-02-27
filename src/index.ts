@@ -268,7 +268,7 @@ const plugin: WOPRPlugin = {
       if (healthy) {
         await provider.fetchVoices();
         ctx.registerExtension("tts", provider);
-        ctx.registerTTSProvider(provider);
+        ctx.registerProvider(provider);
         ctx.log.info(`Chatterbox TTS registered (${provider.serverUrl})`);
       } else {
         ctx.log.warn(`Chatterbox server not reachable at ${provider.serverUrl}`);
